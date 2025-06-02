@@ -56,82 +56,73 @@ const server = http.createServer((req, res) => {
     }
 });
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({
+  server,
+  verifyClient: (info, cb) => {
+    let clientKey;
+    let newlyGeneratedKey = false;
+    const requestCookies = cookie.parse(info.req.headers.cookie || '');
+    const existingKeyHex = requestCookies[COOKIE_NAME];
+
+    if (existingKeyHex) {
+      try {
+        const potentialKey = Buffer.from(existingKeyHex, 'hex');
+        if (potentialKey.length === 32) { // 32 bytes for the key
+          clientKey = potentialKey;
+          console.log('verifyClient: Existing valid key found in cookie.');
+        } else {
+          console.log('verifyClient: Invalid key format in cookie. Will generate new key.');
+        }
+      } catch (error) {
+        console.log('verifyClient: Error parsing key from cookie. Will generate new key.', error);
+      }
+    }
+
+    if (!clientKey) {
+      clientKey = generateSecureKey();
+      newlyGeneratedKey = true;
+      console.log('verifyClient: Generated new key.');
+    }
+
+    info.req.clientKey = clientKey; // Attach clientKey to the request object
+    info.req.newlyGeneratedKey = newlyGeneratedKey; // Attach flag
+
+    const keyHexString = clientKey.toString('hex');
+    const serializedCookie = cookie.serialize(COOKIE_NAME, keyHexString, {
+        httpOnly: true,
+        secure: true, // Ensure HTTPS for this to work in production or modern browsers
+        sameSite: 'None', // Required for cross-site contexts, implies Secure=true
+        maxAge: 365 * 24 * 60 * 60 // 1 year
+    });
+
+    console.log(`verifyClient: Setting cookie: ${serializedCookie}`);
+    cb(true, 0, '', { 'Set-Cookie': serializedCookie });
+  }
+});
 
 console.log(`WebSocket server starting on port ${PORT}`);
 
 wss.on('connection', (ws, req) => {
-    let clientKey;
+    // The clientKey is now set by the verifyClient function and attached to the request.
+    const clientKey = req.clientKey;
     let clientIdString;
-    const requestCookies = cookie.parse(req.headers.cookie || '');
-    const existingKeyHex = requestCookies[COOKIE_NAME];
+
+    // Ensure clientKey was successfully attached by verifyClient
+    if (!clientKey) {
+        console.error('FATAL: clientKey not found on request object in connection handler. Terminating connection.');
+        ws.terminate();
+        return;
+    }
+
+    // If verifyClient indicated a new key was generated, we can log that here if needed.
+    if (req.newlyGeneratedKey) {
+        console.log('Connection event: Client connected with a newly generated key.');
+    } else {
+        console.log('Connection event: Client connected with an existing key from cookie.');
+    }
 
     const clientOrigin = req.headers.origin ||
                        (req.socket.remoteAddress && req.socket.remotePort ? `ws://${req.socket.remoteAddress}:${req.socket.remotePort}` : 'unknown-origin');
-
-
-    if (existingKeyHex) {
-        try {
-            const potentialKey = Buffer.from(existingKeyHex, 'hex');
-            if (potentialKey.length === 32) { // 32 bytes for the key
-                clientKey = potentialKey;
-                console.log('Existing valid key found in cookie.');
-            } else {
-                console.log('Invalid key format in cookie. Generating new key.');
-            }
-        } catch (error) {
-            console.log('Error parsing key from cookie. Generating new key.', error);
-        }
-    }
-
-    if (!clientKey) {
-        clientKey = generateSecureKey();
-        const newCookie = cookie.serialize(COOKIE_NAME, clientKey.toString('hex'), {
-            httpOnly: true,
-            secure: true, // Set to true in production (requires HTTPS)
-            sameSite: 'None', // Required for cross-site contexts
-            maxAge: 365 * 24 * 60 * 60 // 1 year
-        });
-        // Note: The 'ws' library doesn't give direct access to set headers on the initial handshake response.
-        // This cookie setting relies on the client's browser to store it if it were an HTTP request.
-        // For WebSockets, the cookie must be set by a prior HTTP response or via client-side JS if the server can't set it during handshake.
-        // A common pattern is an HTTP endpoint that sets the cookie, then the client connects via WebSocket.
-        // Or, the server could send a special first message asking the client to store the key if it's new, but that's less secure.
-        // For this exercise, we'll assume the cookie mechanism works as intended for persistence,
-        // but be aware of the nuances in a pure WebSocket context without a preceding HTTP interaction controlled by this server.
-        // The `ws` library attaches an `upgradeReq` to the `ws` object, which is the original HTTP GET request.
-        // We can try to set the cookie on the response to this upgrade request if possible,
-        // however, the `ws` server handles the handshake response itself.
-        // A more robust way is to have an initial HTTP endpoint that the client hits to get the cookie.
-        // For now, we'll log it. The client would need to receive this key some other way if it's new.
-        // *Correction*: The cookie should be set on an HTTP response that *precedes* the WebSocket connection,
-        // or if the WebSocket connection itself is part of an HTTP server that can set cookies.
-        // The `ws` library's server `handleUpgrade` method is where this would typically happen.
-        // Let's try to set it on the handshake response if the underlying server allows it.
-        // The 'ws' library handles the upgrade. We can't directly set cookies on *that* response easily.
-        // The most straightforward way for a pure Node.js WS server is that the cookie is expected to be there,
-        // or the client ID is generated and the client must remember it.
-        // We will proceed with generating it and sending it. The client will be responsible for future requests.
-        // The prompt implies the *server* stores it with a cookie. This is tricky.
-        // Let's assume the HTTP server part can handle an initial request to set the cookie.
-        // For the WS connection itself, if the cookie is not there, we generate the key and ID.
-        // The client will receive its ID. The cookie *should* have been set in a previous HTTP interaction.
-        // If not, the key is ephemeral for this session from the server's POV for cookie setting.
-        // However, the prompt says "store it with a cookie ... so that the key persists".
-        // This means the server *must* be able to set this cookie.
-        // The `ws` library's `verifyClient` option or handling the `upgrade` event directly on the HTTP server
-        // are ways to intercept and set cookies.
-
-        // Simplified approach for this context:
-        // The server will generate a key if not provided. It will calculate an ID.
-        // The persistence via cookie is a strong requirement.
-        // The `ws.send` will be used to send the ID. The cookie setting is best-effort here without a separate HTTP endpoint.
-        console.log(`Generated new key. Cookie to be set (manually or by preceding HTTP response): ${COOKIE_NAME}=${clientKey.toString('hex')}`);
-        // We can send a custom header during the handshake using the `handleProtocols` option,
-        // but `Set-Cookie` is a standard response header.
-        // The `ws` server doesn't make it trivial to modify the handshake response headers directly after `new WebSocket.Server({ server });`
-        // A workaround for `ws` is to handle the 'upgrade' event on the HTTP server manually.
-    }
 
     clientIdString = calculateClientId(clientKey, clientOrigin);
 
