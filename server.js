@@ -1,4 +1,6 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws');
 const cookie = require('cookie');
 const crypto = require('crypto'); // For comparing secure strings
@@ -18,6 +20,15 @@ const {
 const PORT = process.env.PORT || 8080;
 const COOKIE_NAME = 'ws-client-key';
 
+// Read index.html content
+let htmlContent;
+try {
+    htmlContent = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+} catch (err) {
+    console.error("Could not read index.html:", err);
+    process.exit(1); // Exit if index.html cannot be read
+}
+
 // In-memory store for connected clients: { clientIdString: WebSocket_instance }
 const connectedClients = new Map();
 
@@ -26,9 +37,12 @@ const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('OK');
+    } else if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(htmlContent);
     } else {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
-        res.end('Not Found. This is a WebSocket server.');
+        res.end('Not Found. This is a WebSocket server, or the path is incorrect.');
     }
 });
 
@@ -212,77 +226,10 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-
-// Modify the HTTP server to handle upgrades for WebSocket cookie setting
-// This is the standard way to intercept the handshake and set cookies with the 'ws' library.
-server.on('upgrade', (request, socket, head) => {
-    // Parse existing cookies
-    const requestCookies = cookie.parse(request.headers.cookie || '');
-    let clientKeyHex = requestCookies[COOKIE_NAME];
-    let clientKey;
-
-    if (clientKeyHex) {
-        try {
-            const potentialKey = Buffer.from(clientKeyHex, 'hex');
-            if (potentialKey.length === 32) {
-                clientKey = potentialKey;
-            }
-        } catch (e) { /* ignore malformed cookie */ }
-    }
-
-    let newCookieToSet;
-    if (!clientKey) {
-        clientKey = generateSecureKey(); // From core.js
-        clientKeyHex = clientKey.toString('hex');
-        newCookieToSet = cookie.serialize(COOKIE_NAME, clientKeyHex, {
-            httpOnly: true,
-            secure: true, // Ensure server is HTTPS for this to work effectively in browsers
-            sameSite: 'None',
-            maxAge: 365 * 24 * 60 * 60, // 1 year
-            path: '/', // Important for cookie visibility
-        });
-    }
-
-    // Proceed with WebSocket handshake
-    wss.handleUpgrade(request, socket, head, (ws) => {
-        if (newCookieToSet) {
-            // This is a conceptual placement. `handleUpgrade` completes the handshake.
-            // The cookie needs to be part of the *response* headers of the handshake.
-            // The `ws` library's `handleUpgrade` doesn't directly let us inject headers into *its* response.
-            // The `verifyClient` option is better for this.
-            // Let's adjust to use `verifyClient`. This means `wss` needs to be initialized with it.
-            // The current structure initializes `wss` before this `server.on('upgrade')`.
-            // This is getting complex. The simplest way with `ws` is:
-            // 1. Client makes HTTP request to an endpoint like /get-cookie, server sets cookie.
-            // 2. Client then opens WebSocket connection, cookie is sent by browser.
-            // The prompt "store it with a cookie" implies the WS server itself does this.
-
-            // For the sake of this exercise, we'll assume the cookie is either pre-existing
-            // or the client is informed of its key/ID and is responsible for using it.
-            // The server-side cookie setting during WS handshake with 'ws' is non-trivial
-            // without re-implementing parts of the handshake.
-
-            // The `handleConnection` logic will use the key (from cookie or new) to derive ID.
-            // The client will always be told its ID.
-            // If a new key was generated, the client is responsible for remembering it (e.g. via the ID).
-            // The "Secure Http-Only SameSite=none" cookie is best set by a dedicated HTTP endpoint.
-
-            // Let's simplify: The server will *not* set the cookie directly in this version.
-            // It will generate a key if not found in cookies, calculate ID, and tell client its ID.
-            // The requirement "server ... store it with a cookie" will be addressed by documentation
-            // suggesting a prior HTTP endpoint for robust cookie setting.
-        }
-        wss.emit('connection', ws, request); // Manually emit 'connection'
-    });
-});
-// Given the complexities of cookie setting with `ws` during handshake,
-// we will remove the custom 'upgrade' handler and rely on `verifyClient` for cookie logic,
-// or simplify to not have the server set the cookie directly but expect it.
-
-// Re-simplifying server.js:
-// The server will check for cookie, generate key if not present.
-// It will NOT attempt to set the cookie itself as it's complex with 'ws' without a custom handshake.
-// The client will receive its ID. Persistence relies on browser sending cookie if it was set prior.
+// The custom 'upgrade' handler has been removed to prevent conflicts with
+// the default upgrade handling provided by `new WebSocket.Server({ server })`.
+// The `wss.on('connection', ...)` handler contains the necessary logic
+// for client identification and communication.
 
 server.listen(PORT, () => {
     console.log(`HTTP and WebSocket server is listening on port ${PORT}`);
