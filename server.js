@@ -20,13 +20,23 @@ const {
 const PORT = process.env.PORT || 8080;
 const COOKIE_NAME = 'ws-client-key';
 
-// Read index.html content
-let htmlContent;
-try {
-    htmlContent = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-} catch (err) {
-    console.error("Could not read index.html:", err);
-    process.exit(1); // Exit if index.html cannot be read
+const arquivos_estáticos = {
+    "/": {
+        conteúdo: fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8'),
+        tipo: 'text/html',
+    },
+    "/client.js": {
+        conteúdo: fs.readFileSync(path.join(__dirname, 'client.js'), 'utf8'),
+        tipo: 'application/javascript',
+    },
+    "/locales/en.json": {
+        conteúdo: fs.readFileSync(path.join(__dirname, 'locales', 'en.json'), 'utf8'),
+        tipo: 'application/json',
+    },
+    "/locales/ptbr.json": {
+        conteúdo: fs.readFileSync(path.join(__dirname, 'locales', 'ptbr.json'), 'utf8'),
+        tipo: 'application/json',
+    },
 }
 
 // In-memory store for connected clients: { clientIdString: WebSocket_instance }
@@ -37,9 +47,9 @@ const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('OK');
-    } else if (req.url === '/') {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(htmlContent);
+    } else if (arquivos_estáticos[req.url]) {
+        res.writeHead(200, { 'Content-Type': arquivos_estáticos[req.url].tipo });
+        res.end(arquivos_estáticos[req.url].conteúdo);
     } else {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('Not Found. This is a WebSocket server, or the path is incorrect.');
