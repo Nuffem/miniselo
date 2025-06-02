@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="pageTitle">WebSocket Binary Client</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f4f4; color: #333; }
+        .container { max-width: 800px; margin: auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        .status-bar { margin-bottom: 20px; padding: 10px; background-color: #eee; border-radius: 4px; }
+        .status-bar span { margin-right: 10px; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="text"], textarea { width: calc(100% - 22px); padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        textarea { resize: vertical; min-height: 60px; }
+        button { padding: 10px 15px; margin-top: 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #logs { height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-top: 20px; background-color: #f9f9f9; border-radius: 4px; }
+        .log-entry { padding: 2px 0; border-bottom: 1px solid #eee; font-size: 0.9em; }
+        .log-entry:last-child { border-bottom: none; }
+        .log-error { color: red; }
+        .log-warning { color: orange; }
+        .lang-selector { position: fixed; top: 10px; right: 10px; padding: 5px; background: #fff; border: 1px solid #ccc; border-radius: 4px;}
+    </style>
+</head>
+<body>
+    <div class="lang-selector">
+        <label for="langSelector" data-i18n="langSelectorLabel">Language:</label>
+        <select id="langSelector">
+            <!-- Options will be populated by JS -->
+        </select>
+    </div>
+
+    <div class="container">
+        <h1 data-i18n="pageTitle">WebSocket Binary Client</h1>
+
+        <div class="status-bar">
+            <strong data-i18n="connectionStatus">Connection Status:</strong> <span id="connectionStatus" data-i18n="notConnected">Not Connected</span> |
+            <strong data-i18n="yourIdLabel">Your Client ID:</strong> <span id="clientId" data-i18n="noId">N/A</span>
+            <button id="connectButton" style="margin-left: 20px; margin-top:0; padding: 5px 10px;">Connect</button>
+        </div>
+
+        <div id="controls">
+            <h2 data-i18n="sendMessageTitle">Send Message</h2>
+            <div>
+                <label for="recipientId" data-i18n="recipientIdLabel">Recipient ID:</label>
+                <input type="text" id="recipientId" data-i18n="recipientIdPlaceholder" placeholder="Enter recipient's 64-char ID">
+            </div>
+            <div>
+                <label for="message" data-i18n="messageLabel">Message:</label>
+                <textarea id="message" data-i18n="messagePlaceholder" placeholder="Enter your message"></textarea>
+            </div>
+            <button id="sendButton" data-i18n="sendMessageButton">Send Message</button>
+        </div>
+
+        <div id="logContainer">
+            <h2 data-i18n="logsTitle">Logs</h2>
+            <div id="logs"></div>
+            <button id="clearLogsButton" data-i18n="clearLogsButton" style="margin-top:10px;">Clear Logs</button>
+        </div>
+    </div>
+
+    <script src="client.js"></script>
+</body>
+</html>
