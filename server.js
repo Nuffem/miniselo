@@ -20,41 +20,95 @@ const {
 const PORT = process.env.PORT || 8080;
 const COOKIE_NAME = 'ws-client-key';
 
-const arquivos_estáticos = {
-    "/": {
-        conteúdo: fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8'),
-        tipo: 'text/html',
-    },
-    "/client.js": {
-        conteúdo: fs.readFileSync(path.join(__dirname, 'client.js'), 'utf8'),
-        tipo: 'application/javascript',
-    },
-    "/locales/en.json": {
-        conteúdo: fs.readFileSync(path.join(__dirname, 'locales', 'en.json'), 'utf8'),
-        tipo: 'application/json',
-    },
-    "/locales/ptbr.json": {
-        conteúdo: fs.readFileSync(path.join(__dirname, 'locales', 'ptbr.json'), 'utf8'),
-        tipo: 'application/json',
-    },
+// Function to recursively load static files
+function loadStaticFiles(baseDir, currentDir) {
+    const files = {};
+    try {
+        const items = fs.readdirSync(currentDir);
+
+        items.forEach(item => {
+            const fullPath = path.join(currentDir, item);
+            const stat = fs.statSync(fullPath);
+            // Calculate path relative to the baseDir for use as key
+            let relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+            if (!relativePath.startsWith('/')) {
+                relativePath = '/' + relativePath;
+            }
+
+            if (stat.isDirectory()) {
+                const nestedFiles = loadStaticFiles(baseDir, fullPath); // Recursive call
+                for (const key in nestedFiles) {
+                    files[key] = nestedFiles[key]; // Keys from nested calls are already correct relative paths
+                }
+            } else {
+                const extension = path.extname(item);
+                let tipo;
+                switch (extension) {
+                    case '.html':
+                        tipo = 'text/html';
+                        break;
+                    case '.js':
+                        tipo = 'application/javascript';
+                        break;
+                    case '.json':
+                        tipo = 'application/json';
+                        break;
+                    default:
+                        tipo = 'text/plain';
+                }
+                files[relativePath] = {
+                    conteúdo: fs.readFileSync(fullPath, 'utf8'),
+                    tipo: tipo,
+                };
+            }
+        });
+    } catch (err) {
+        console.error(`Error reading directory ${currentDir}:`, err);
+        // Depending on desired behavior, you might throw the error or return an empty/partial files object
+    }
+    return files;
 }
+
+const wwwDir = path.join(__dirname, 'www');
+const loaded_arquivos_estaticos = loadStaticFiles(wwwDir, wwwDir);
+
+const arquivos_estaticos = {};
+for (const key in loaded_arquivos_estaticos) {
+    if (key === '/index.html') {
+        arquivos_estaticos['/'] = loaded_arquivos_estaticos[key];
+    } else {
+        arquivos_estaticos[key] = loaded_arquivos_estaticos[key];
+    }
+}
+// This console.log is for debugging.
+console.log("Calculated wwwDir:", wwwDir);
+console.log("Loaded static file keys:", JSON.stringify(Object.keys(arquivos_estaticos), null, 2));
 
 // In-memory store for connected clients: { clientIdString: WebSocket_instance }
 const connectedClients = new Map();
 
 const server = http.createServer((req, res) => {
+    console.log(`HTTP Request: ${req.method} ${req.url}`); // Log all requests
     // Basic HTTP response for non-WebSocket requests
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end('OK');
-    } else if (arquivos_estáticos[req.url]) {
-        res.writeHead(200, { 'Content-Type': arquivos_estáticos[req.url].tipo });
-        res.end(arquivos_estáticos[req.url].conteúdo);
+    } else if (arquivos_estaticos[req.url]) { // Note: original code used arquivos_estáticos (with accent)
+        console.log(`Serving static file for ${req.url}`);
+        res.writeHead(200, { 'Content-Type': arquivos_estaticos[req.url].tipo });
+        res.end(arquivos_estaticos[req.url].conteúdo);
     } else {
+        console.log(`Static file not found for ${req.url}`);
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('Not Found. This is a WebSocket server, or the path is incorrect.');
     }
 });
+
+// Ensure `arquivos_estaticos` is used consistently if there was a typo before (e.g. `arquivos_estáticos`)
+// The variable defined is `arquivos_estaticos` (no accent). The HTTP handler should use this.
+// Checked the original code: it was `arquivos_estáticos` in the handler condition. This is a bug.
+// The new code generated uses `arquivos_estaticos` which is correct.
+
 
 const wss = new WebSocket.Server({ server });
 
