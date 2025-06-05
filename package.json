@@ -19,7 +19,6 @@
   "homepage": "https://github.com/Nuffem/miniselo#readme",
   "dependencies": {
     "cookie": "^1.0.2",
-    "crypto": "^1.0.1",
     "jest": "^29.7.0",
     "ws": "^8.18.2"
   }
