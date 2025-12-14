@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exemplo Miniselo</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+
+    div.section {
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      border-radius: 4px;
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+    }
+
+    input[type="text"],
+    textarea {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      box-sizing: border-box;
+    }
+
+    button {
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    pre {
+      background: #f4f4f4;
+      padding: 1rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      border-radius: 4px;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .success {
+      color: green;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Miniselo - Exemplo de Uso</h1>
+
+  <div class="section">
+    <h2>Configuração</h2>
+    <label for="baseUrl">URL do Servidor:</label>
+    <input type="text" id="baseUrl" value="http://localhost:8000">
+  </div>
+
+  <div class="section">
+    <h2>1. Gerar Chave</h2>
+    <p>Gera uma chave aleatória de 32 bytes em Base64 localmente.</p>
+    <button id="btnGerarChave">Gerar Nova Chave</button>
+    <br><br>
+    <label for="chave">Chave (Base64):</label>
+    <input type="text" id="chave" placeholder="Clique em gerar ou cole uma chave existente">
+  </div>
+
+  <div class="section">
+    <h2>2. Publicar Mensagem</h2>
+    <label for="conteudo">Conteúdo (máx 512 bytes):</label>
+    <textarea id="conteudo" rows="4" placeholder="Digite sua mensagem aqui..."></textarea>
+    <button id="btnPublicar">Publicar</button>
+    <p><strong>Status:</strong> <span id="resPublicar"></span></p>
+  </div>
+
+  <div class="section">
+    <h2>3. Obter Mensagem</h2>
+    <label for="idMsg">ID da Mensagem:</label>
+    <input type="text" id="idMsg" placeholder="ID da mensagem para recuperar">
+    <button id="btnObter">Obter</button>
+    <h3>Conteúdo Recuperado:</h3>
+    <pre id="displayMensagem">Nenhum conteúdo carregado.</pre>
+  </div>
+
+  <script type="module">
+    import { Miniselo } from './miniselo.js';
+
+    const baseUrlInput = document.getElementById('baseUrl');
+    const chaveInput = document.getElementById('chave');
+    const conteudoInput = document.getElementById('conteudo');
+    const idMsgInput = document.getElementById('idMsg');
+    const displayMensagem = document.getElementById('displayMensagem');
+    const resPublicar = document.getElementById('resPublicar');
+
+    function getClient() {
+      return new Miniselo(baseUrlInput.value);
+    }
+
+    document.getElementById('btnGerarChave').addEventListener('click', () => {
+      try {
+        const chave = Miniselo.gerarChave();
+        chaveInput.value = chave;
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    document.getElementById('btnPublicar').addEventListener('click', async () => {
+      const client = getClient();
+      const chave = chaveInput.value.trim();
+      const conteudo = conteudoInput.value;
+
+      resPublicar.className = '';
+      resPublicar.textContent = '';
+
+      if (!chave) {
+        resPublicar.className = 'error';
+        resPublicar.textContent = 'Erro: A chave é obrigatória.';
+        return;
+      }
+      if (!conteudo) {
+        resPublicar.className = 'error';
+        resPublicar.textContent = 'Erro: O conteúdo é obrigatório.';
+        return;
+      }
+
+      try {
+        resPublicar.textContent = 'Enviando...';
+        const resultado = await client.publicar(chave, conteudo);
+
+        resPublicar.className = 'success';
+        resPublicar.textContent = `Sucesso! ID: ${resultado.id}`;
+
+        // Preenche automaticamente o campo de ID para facilitar o teste de "Obter"
+        idMsgInput.value = resultado.id;
+      } catch (err) {
+        resPublicar.className = 'error';
+        resPublicar.textContent = `Erro: ${err.message}`;
+      }
+    });
+
+    document.getElementById('btnObter').addEventListener('click', async () => {
+      const client = getClient();
+      const id = idMsgInput.value.trim();
+
+      displayMensagem.textContent = '';
+
+      if (!id) {
+        displayMensagem.textContent = 'Erro: ID é obrigatório.';
+        return;
+      }
+
+      try {
+        displayMensagem.textContent = 'Carregando...';
+        const msg = await client.obter(id);
+        displayMensagem.textContent = msg;
+      } catch (err) {
+        displayMensagem.textContent = `Erro ao obter mensagem: ${err.message}`;
+      }
+    });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,22 @@
+# Use a imagem oficial do Node.js (versão Alpine para ser mais leve)
+FROM node:22-alpine
+
+# Define o diretório de trabalho na raiz do app dentro do container
+WORKDIR /app
+
+# Copia o arquivo LEIA-ME.md da raiz do projeto para a raiz do WORKDIR (/app)
+# Isso é necessário porque o servidor.js procura este arquivo em ".."
+COPY LEIA-ME.md .
+
+# Cria o diretório servidor e copia o código fonte
+COPY servidor/ servidor/
+
+# Define o usuário node (boa prática de segurança)
+USER node
+
+# Expõe a porta 8000 (padrão do servidor.js)
+EXPOSE 8000
+
+# Define o comando de inicialização
+# Executamos a partir da pasta servidor para manter o contexto esperado
+CMD ["node", "servidor/servidor.js"]
